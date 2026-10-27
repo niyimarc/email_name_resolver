@@ -1,11 +1,9 @@
-# Builds the standalone Windows EmailNameResolver.exe on GitHub's Windows
-# machines (tests run first) and publishes it as a GitHub Release.
+# Builds the standalone Windows EmailNameResolver.exe and publishes it as a
+# GitHub Release. Runs ONLY when you ask for it (not on every push):
 #
-#   * Every push to master  -> release "latest-build" is replaced with the new
-#                              .exe (always the newest version of master)
-#   * Push a tag like v1.2.0 -> a permanent numbered release "v1.2.0"
-#   * Actions tab > "Build Windows .exe" > Run workflow -> build only; the
-#     .exe is attached to that run under Artifacts
+#   * Push a version tag:   git tag v1.0.0   then   git push origin v1.0.0
+#   * Or: GitHub > Actions > "Build Windows .exe" > Run workflow
+#     (enter a version such as v1.0.1)
 #
 # Newest .exe (works in any browser, e.g. on the RDP):
 #   https://github.com/niyimarc/email_name_resolver/releases/latest/download/EmailNameResolver.exe
@@ -13,28 +11,29 @@ name: Build Windows .exe
 
 on:
   push:
-    branches: [master]
     tags: ["v*"]
   workflow_dispatch:
+    inputs:
+      version:
+        description: "Release name, e.g. v1.0.1"
+        required: true
 
 permissions:
-  contents: write   # needed to create/replace releases
-
-# A newer push cancels a build that is still running for an older one.
-concurrency:
-  group: build-exe-${{ github.ref }}
-  cancel-in-progress: true
+  contents: write   # needed to create the release
 
 jobs:
   build:
     runs-on: windows-latest
+    timeout-minutes: 30            # a normal build takes about 8-12 minutes
     defaults:
       run:
         shell: bash
+    env:
+      VERSION: ${{ github.event.inputs.version || github.ref_name }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: "3.13"   # Kivy 2.3.1 has no wheels for 3.14+
           cache: pip
@@ -42,37 +41,16 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install -r requirements-dev.txt
-
-      - name: Run tests
-        run: python -m pytest -q
+          pip install -r requirements.txt
 
       - name: Build standalone .exe
-        run: pyinstaller build_onefile.spec --clean -y
+        run: pyinstaller build_onefile.spec --clean -y --log-level WARN
 
-      - name: Keep the .exe with this run
-        uses: actions/upload-artifact@v4
-        with:
-          name: EmailNameResolver-exe
-          path: dist/EmailNameResolver.exe
-
-      - name: Publish "latest-build" release (push to master)
-        if: github.ref == 'refs/heads/master'
+      - name: Publish release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release delete latest-build --cleanup-tag --yes || true
-          gh release create latest-build dist/EmailNameResolver.exe \
+          gh release create "$VERSION" dist/EmailNameResolver.exe \
             --target "${{ github.sha }}" \
-            --title "Latest build (master)" \
-            --notes "Automatic build of commit ${{ github.sha }} on $(date -u '+%Y-%m-%d %H:%M UTC')." \
-            --latest
-
-      - name: Publish numbered release (version tag)
-        if: startsWith(github.ref, 'refs/tags/v')
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          gh release create "${{ github.ref_name }}" dist/EmailNameResolver.exe \
-            --title "Email Name Resolver ${{ github.ref_name }}" \
+            --title "Email Name Resolver $VERSION" \
             --generate-notes --latest

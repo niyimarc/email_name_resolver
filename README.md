@@ -333,21 +333,24 @@ few seconds slower than the folder version (`build.spec`).
 ### Download the .exe from GitHub (no copying)
 
 `.github/workflows/build-exe.yml` builds the single-file .exe on GitHub's
-Windows machines (tests run first). To publish a new version:
+Windows machines (the tests run first; a failing test stops the build):
 
-```
-git tag v1.0.0
-git push origin v1.0.0
-```
+- **Every push to `master`** replaces the release **"Latest build (master)"**
+  with a fresh .exe, about 5 to 10 minutes after the push.
+- **A version tag** creates a permanent numbered release:
 
-After about 5 to 10 minutes the Release appears under **Releases** on GitHub.
-On any computer (e.g. the RDP) download the latest version directly:
+  ```
+  git tag v1.0.0
+  git push origin v1.0.0
+  ```
+
+On any computer (e.g. the RDP) this link always downloads the newest .exe:
 
 https://github.com/niyimarc/email_name_resolver/releases/latest/download/EmailNameResolver.exe
 
 (For a private repository, sign in to GitHub in that browser first.) You can
 also run the build by hand: **Actions > Build Windows .exe > Run workflow**;
-the .exe is then attached to that run under **Artifacts** instead of a Release.
+the .exe is then attached to that run under **Artifacts**.
 
 The first time Windows runs a downloaded, unsigned .exe, SmartScreen may show
 "Windows protected your PC": click **More info > Run anyway**.

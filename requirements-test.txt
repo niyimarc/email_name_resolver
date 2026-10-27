@@ -1,0 +1,8 @@
+# Light install for running the test suite (used by GitHub Actions).
+# No Kivy / PyInstaller: the UI-helper tests are skipped automatically.
+#   pip install -r requirements-test.txt
+ollama==0.6.3
+pydantic==2.14.1
+requests==2.34.2
+pytest==9.1.1
+pytest-cov==7.1.0
