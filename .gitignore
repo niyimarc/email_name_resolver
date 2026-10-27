@@ -1,0 +1,33 @@
+# --- Python -----------------------------------------------------------------
+__pycache__/
+*.py[cod]
+.pytest_cache/
+
+# --- Virtual environments -----------------------------------------------------
+email_name_resolver_env/
+.venv/
+venv/
+env/
+
+# --- PyInstaller output ------------------------------------------------------
+# NOTE: do NOT ignore *.spec: build.spec and build_onefile.spec are part of
+# the project (GitHub's default Python .gitignore ignores *.spec).
+build/
+dist/
+
+# --- Exports and local test files ------------------------------------------------
+email_list_*.csv
+email_list_*.zip
+email_names_*.csv
+*.tmp
+
+# --- Kivy / logs -------------------------------------------------------------------
+.kivy/
+*.log
+
+# --- OS / editors --------------------------------------------------------------------
+Thumbs.db
+desktop.ini
+.DS_Store
+.vscode/
+.idea/

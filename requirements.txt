@@ -1,0 +1,12 @@
+# Requires 64-bit Python 3.10 to 3.13. Kivy 2.3.1 has no Windows wheels for
+# Python 3.14 yet, so pip would try (and fail) to build it from source.
+
+# Runtime
+kivy[base]==2.3.1
+ollama==0.6.3
+pydantic==2.14.1
+requests==2.34.2
+plyer==2.1.0
+
+# Packaging
+pyinstaller==6.22.3
