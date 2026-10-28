@@ -52,6 +52,9 @@ def atomic_write_text(path: Path, text: str) -> None:
         raise
 
 
+UI_SCALE_CHOICES = ("Auto", "80%", "90%", "100%", "110%", "125%")
+
+
 @dataclass
 class Settings:
     """User-editable settings."""
@@ -70,6 +73,9 @@ class Settings:
     # Last choices in the Export dialog.
     export_format: str = "mailing"       # "mailing" or "full"
     export_only_resolved: bool = True
+    # Size of buttons and text: "Auto" follows Windows display scaling,
+    # or a percentage of it ("80%" ... "125%"). Applied on the next start.
+    ui_scale: str = "Auto"
 
 
 def dictionaries_dir() -> Path:
@@ -116,6 +122,8 @@ def load_settings(path: Optional[Path] = None) -> Settings:
         values["dns_service"] = defaults.dns_service
     if values["export_format"] not in ("mailing", "full"):
         values["export_format"] = defaults.export_format
+    if values["ui_scale"] not in UI_SCALE_CHOICES:
+        values["ui_scale"] = defaults.ui_scale
     return Settings(**values)
 
 

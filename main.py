@@ -48,10 +48,22 @@ from kivy.config import Config  # noqa: E402  (must precede other kivy imports)
 
 Config.set("input", "mouse", "mouse,multitouch_on_demand")  # no red dots
 Config.set("kivy", "exit_on_escape", "0")
-Config.set("graphics", "width", "1360")
-Config.set("graphics", "height", "820")
-Config.set("graphics", "minimum_width", "980")
-Config.set("graphics", "minimum_height", "600")
+
+
+def _saved_ui_scale() -> str:
+    """The "Interface size" setting, read before Kivy starts."""
+    try:
+        from storage.settings import load_settings as _load
+
+        return _load().ui_scale
+    except Exception:
+        return "Auto"
+
+
+import ui_layout  # noqa: E402  (no Kivy imports inside)
+
+# Window sized from the screen (never larger than it) + Interface size.
+ui_layout.prepare_window(Config, _saved_ui_scale())
 
 import subprocess  # noqa: E402
 import threading  # noqa: E402
@@ -62,10 +74,12 @@ from typing import Any, Callable, Dict, List, Optional, Tuple  # noqa: E402
 
 from kivy.app import App  # noqa: E402
 from kivy.clock import Clock  # noqa: E402
+from kivy.core.window import Window  # noqa: E402
 from kivy.lang import Builder  # noqa: E402
 from kivy.metrics import dp  # noqa: E402
 from kivy.properties import (  # noqa: E402
     BooleanProperty,
+    DictProperty,
     ListProperty,
     NumericProperty,
     StringProperty,
@@ -99,6 +113,7 @@ from exporters.csv_export import (  # noqa: E402
     provider_counts,
     select_rows,
 )
+import version  # noqa: E402  (app version + developer info)
 from help_guide import open_setup_guide  # noqa: E402
 from pipeline.ai_judge import list_local_models, model_is_pulled  # noqa: E402
 from pipeline.email_extract import (  # noqa: E402
@@ -135,9 +150,15 @@ from pipeline.runner import (  # noqa: E402
 )
 from pipeline.splitter import split_email_local  # noqa: E402
 from storage.session import clear_session, load_session, save_session  # noqa: E402
-from storage.settings import Settings, dictionaries_dir, load_settings, save_settings  # noqa: E402
+from storage.settings import (  # noqa: E402
+    UI_SCALE_CHOICES,
+    Settings,
+    dictionaries_dir,
+    load_settings,
+    save_settings,
+)
 
-APP_TITLE = "Email Name Resolver"
+APP_TITLE = f"{version.APP_NAME} v{version.__version__}"   # e.g. "Email Name Resolver v1.0.0"
 USER_NOT_PERSON_REASON = "marked not a person by user"
 # ---------------------------------------------------------------------------
 # Native file dialogs (always called from a background thread)
@@ -283,18 +304,26 @@ KV = """
             pos: self.pos
             size: self.size
     CellLabel:
-        size_hint_x: 0.15
+        size_hint_x: app.cols['email'] or None
+        width: 0
+        opacity: 1 if app.cols['email'] else 0
         text: root.email
     CellLabel:
-        size_hint_x: 0.065
+        size_hint_x: app.cols['real'] or None
+        width: 0
+        opacity: 1 if app.cols['real'] else 0
         text: root.real_text
         color: (0.55, 0.9, 0.55, 1) if root.real_text == 'yes' else (0.95, 0.6, 0.6, 1)
     CellLabel:
-        size_hint_x: 0.065
+        size_hint_x: app.cols['confidence'] or None
+        width: 0
+        opacity: 1 if app.cols['confidence'] else 0
         text: root.confidence_text
     TextInput:
         id: final_input
-        size_hint_x: 0.15
+        size_hint_x: app.cols['final'] or None
+        width: 0
+        opacity: 1 if app.cols['final'] else 0
         multiline: False
         write_tab: False
         font_size: '13sp'
@@ -303,22 +332,32 @@ KV = """
         on_text: root.on_final_name_edited(self.text)
         on_text_validate: self.focus = False
     CellLabel:
-        size_hint_x: 0.12
+        size_hint_x: app.cols['parts'] or None
+        width: 0
+        opacity: 1 if app.cols['parts'] else 0
         text: root.parts_text
     ClickCell:
-        size_hint_x: 0.14
+        size_hint_x: app.cols['reason'] or None
+        width: 0
+        opacity: 1 if app.cols['reason'] else 0
         text: root.reason
         on_release: root.show_details()
     CellLabel:
-        size_hint_x: 0.10
+        size_hint_x: app.cols['website'] or None
+        width: 0
+        opacity: 1 if app.cols['website'] else 0
         markup: True
         text: root.website_markup
         on_ref_press: app.open_url(args[1])
     CellLabel:
-        size_hint_x: 0.10
+        size_hint_x: app.cols['provider'] or None
+        width: 0
+        opacity: 1 if app.cols['provider'] else 0
         text: root.provider
     CellLabel:
-        size_hint_x: 0.08
+        size_hint_x: app.cols['status'] or None
+        width: 0
+        opacity: 1 if app.cols['status'] else 0
         text: root.status
         color: root.status_color
 
@@ -376,8 +415,10 @@ KV = """
             on_release: app.hide_banner()
 
     BoxLayout:
+        # Wide/medium: input left, buttons right. Narrow: buttons under input.
         size_hint_y: None
-        height: dp(176)
+        orientation: 'vertical' if app.ui_mode == 'narrow' else 'horizontal'
+        height: ((dp(80) if app.short_screen else dp(118)) + dp(8) + dp(150)) if app.ui_mode == 'narrow' else (dp(150) if app.short_screen else dp(176))
         spacing: dp(8)
         EmailInput:
             id: email_input
@@ -386,8 +427,10 @@ KV = """
             font_size: '14sp'
         BoxLayout:
             orientation: 'vertical'
-            size_hint_x: None
+            size_hint_x: 1 if app.ui_mode == 'narrow' else None
             width: dp(330)
+            size_hint_y: None if app.ui_mode == 'narrow' else 1
+            height: dp(150)
             spacing: dp(5)
             BoxLayout:
                 spacing: dp(5)
@@ -455,7 +498,9 @@ KV = """
         Label:
             id: counts_label
             size_hint_x: None
-            width: dp(430)
+            width: min(dp(430), root.width * 0.55)
+            shorten: True
+            shorten_from: 'left'
             markup: True
             text: ''
             text_size: self.size
@@ -475,31 +520,49 @@ KV = """
                 pos: self.pos
                 size: self.size
         HeaderLabel:
-            size_hint_x: 0.15
+            size_hint_x: app.cols['email'] or None
+            width: 0
+            opacity: 1 if app.cols['email'] else 0
             text: 'Email'
         HeaderLabel:
-            size_hint_x: 0.065
+            size_hint_x: app.cols['real'] or None
+            width: 0
+            opacity: 1 if app.cols['real'] else 0
             text: 'Is Real Name'
         HeaderLabel:
-            size_hint_x: 0.065
+            size_hint_x: app.cols['confidence'] or None
+            width: 0
+            opacity: 1 if app.cols['confidence'] else 0
             text: 'Confidence'
         HeaderLabel:
-            size_hint_x: 0.15
+            size_hint_x: app.cols['final'] or None
+            width: 0
+            opacity: 1 if app.cols['final'] else 0
             text: 'Final Name (editable)'
         HeaderLabel:
-            size_hint_x: 0.12
+            size_hint_x: app.cols['parts'] or None
+            width: 0
+            opacity: 1 if app.cols['parts'] else 0
             text: 'Name Parts'
         HeaderLabel:
-            size_hint_x: 0.14
+            size_hint_x: app.cols['reason'] or None
+            width: 0
+            opacity: 1 if app.cols['reason'] else 0
             text: 'Reason (click)'
         HeaderLabel:
-            size_hint_x: 0.10
+            size_hint_x: app.cols['website'] or None
+            width: 0
+            opacity: 1 if app.cols['website'] else 0
             text: 'Company Website'
         HeaderLabel:
-            size_hint_x: 0.10
+            size_hint_x: app.cols['provider'] or None
+            width: 0
+            opacity: 1 if app.cols['provider'] else 0
             text: 'Mail Provider'
         HeaderLabel:
-            size_hint_x: 0.08
+            size_hint_x: app.cols['status'] or None
+            width: 0
+            opacity: 1 if app.cols['status'] else 0
             text: 'Email Status'
 
     ResultsTable:
@@ -685,6 +748,10 @@ class EmailNameResolverApp(App):
 
     running = BooleanProperty(False)
     dialog_open = BooleanProperty(False)
+    # Responsive layout, recomputed whenever the window is resized.
+    ui_mode = StringProperty(ui_layout.MODE_WIDE)
+    short_screen = BooleanProperty(False)
+    cols = DictProperty(ui_layout.column_hints(ui_layout.MODE_WIDE))
 
     def __init__(self, **kwargs: Any) -> None:
         """Set up state containers; nothing touches disk here."""
@@ -726,7 +793,40 @@ class EmailNameResolverApp(App):
         if os.path.exists(icon):
             self.icon = icon
         Builder.load_string(KV)
+        Window.bind(size=self.update_layout)
+        self.update_layout(Window, Window.size)
         return RootView()
+
+    def update_layout(self, _window: Any, size: Tuple[float, float]) -> None:
+        """Pick the wide/medium/narrow layout for the current window size."""
+        width_dp, height_dp = size[0] / dp(1), size[1] / dp(1)
+        mode = ui_layout.layout_mode(width_dp)
+        if mode != self.ui_mode:
+            self.ui_mode = mode
+            self.cols = ui_layout.column_hints(mode)
+        self.short_screen = height_dp < ui_layout.SHORT_MAX_DP
+
+    def fit_popup(self, popup: Popup, width: float, height: Optional[float] = None) -> Popup:
+        """Size ``popup`` to at most 95% of the window and keep it fitting.
+
+        Args:
+            popup: The popup (``size_hint_x`` must be None).
+            width: Preferred width in pixels.
+            height: Preferred height in pixels, or None to keep ``size_hint_y``.
+
+        Returns:
+            The same popup, for chaining.
+        """
+        def refit(*_: Any) -> None:
+            w, h = ui_layout.fit_size((width, height or 0), Window.size)
+            popup.width = w
+            if height is not None:
+                popup.height = h
+
+        refit()
+        Window.bind(size=refit)
+        popup.bind(on_dismiss=lambda *_: Window.unbind(size=refit))
+        return popup
 
     @property
     def table(self) -> ResultsTable:
@@ -826,8 +926,8 @@ class EmailNameResolverApp(App):
         label = Label(text=text, halign="left", valign="top")
         label.bind(size=lambda w, s: setattr(w, "text_size", s))
         box.add_widget(label)
-        popup = Popup(title=title, content=box, size_hint=(None, None),
-                      size=(dp(520), dp(240)))
+        popup = self.fit_popup(Popup(title=title, content=box, size_hint=(None, None)),
+                               dp(520), dp(240))
         close = Button(text="Close", size_hint_y=None, height=dp(40))
         close.bind(on_release=popup.dismiss)
         box.add_widget(close)
@@ -1159,9 +1259,10 @@ class EmailNameResolverApp(App):
             height=dp(26)))
 
         def heading(text: str) -> None:
-            box.add_widget(Label(text=f"[b]{text}[/b]", markup=True, size_hint_y=None,
-                                 height=dp(24), halign="left", valign="middle",
-                                 text_size=(dp(640), dp(24))))
+            label = Label(text=f"[b]{text}[/b]", markup=True, size_hint_y=None,
+                          height=dp(24), halign="left", valign="middle")
+            label.bind(size=lambda w, s: setattr(w, "text_size", s))
+            box.add_widget(label)
 
         def option_row(widget: Any, text: str, hint: str = "", height: float = 46) -> BoxLayout:
             row = BoxLayout(size_hint_y=None, height=dp(height), spacing=dp(6))
@@ -1225,8 +1326,8 @@ class EmailNameResolverApp(App):
         outer.add_widget(body)
 
         buttons = BoxLayout(size_hint_y=None, height=dp(42), spacing=dp(8))
-        popup = Popup(title="Export CSV", content=outer, size_hint=(None, 0.94),
-                      width=dp(720))
+        popup = self.fit_popup(Popup(title="Export CSV", content=outer,
+                                     size_hint=(None, 0.94)), dp(720))
 
         def go(*_: Any) -> None:
             chosen = {label for label, cb in provider_boxes.items() if cb.active}
@@ -1328,8 +1429,9 @@ class EmailNameResolverApp(App):
         scroll.add_widget(label)
         box.add_widget(scroll)
         buttons = BoxLayout(size_hint_y=None, height=dp(40), spacing=dp(8))
-        popup = Popup(title="Export complete", content=box, size_hint=(None, None),
-                      size=(dp(680), dp(420) if contents else dp(260)))
+        popup = self.fit_popup(Popup(title="Export complete", content=box,
+                                     size_hint=(None, None)),
+                               dp(680), dp(420) if contents else dp(260))
         target = Path(path).resolve()
         folder = str(target if target.is_dir() else target.parent)
         open_btn = Button(text="Open folder")
@@ -1350,8 +1452,9 @@ class EmailNameResolverApp(App):
         box = BoxLayout(orientation="vertical", padding=dp(12), spacing=dp(10))
         box.add_widget(Label(text="Clear all results and delete the saved session?"))
         buttons = BoxLayout(size_hint_y=None, height=dp(40), spacing=dp(8))
-        popup = Popup(title="Confirm clear", content=box, size_hint=(None, None),
-                      size=(dp(460), dp(180)), auto_dismiss=False)
+        popup = self.fit_popup(Popup(title="Confirm clear", content=box,
+                                     size_hint=(None, None), auto_dismiss=False),
+                               dp(460), dp(180))
 
         def confirm(*_: Any) -> None:
             popup.dismiss()
@@ -1398,8 +1501,8 @@ class EmailNameResolverApp(App):
         scroll.add_widget(label)
         box = BoxLayout(orientation="vertical", padding=dp(12), spacing=dp(10))
         box.add_widget(scroll)
-        popup = Popup(title="Row details", content=box, size_hint=(None, None),
-                      size=(dp(680), dp(420)))
+        popup = self.fit_popup(Popup(title="Row details", content=box,
+                                     size_hint=(None, None)), dp(680), dp(420))
         buttons = BoxLayout(size_hint_y=None, height=dp(40), spacing=dp(8))
         teach_yes = Button(text="Teach: correct name")
         teach_yes.bind(on_release=lambda *_: (popup.dismiss(), self.teach_name(row)))
@@ -1539,8 +1642,8 @@ class EmailNameResolverApp(App):
         box = BoxLayout(orientation="vertical", padding=dp(12), spacing=dp(8))
         box.add_widget(Label(text="Add names from a .txt or .csv file (one per line,\n"
                                   "or first column) to which list?", halign="center"))
-        popup = Popup(title="Import names", content=box, size_hint=(None, None),
-                      size=(dp(460), dp(320)))
+        popup = self.fit_popup(Popup(title="Import names", content=box,
+                                     size_hint=(None, None)), dp(460), dp(320))
         for text, kind in (("First names", KIND_FIRST), ("Surnames", KIND_SURNAME),
                            ("Not-a-name words (e.g. info, coolguy)", KIND_ROLE)):
             btn = Button(text=text, size_hint_y=None, height=dp(40))
@@ -1591,40 +1694,44 @@ class EmailNameResolverApp(App):
 
     def open_settings(self) -> None:
         """Open the settings popup (model, URL, toggles, name-list tools)."""
+        def note(text: str) -> Label:
+            """Grey helper text that shortens instead of overflowing."""
+            label = Label(text=text, color=(0.7, 0.7, 0.7, 1), halign="left",
+                          valign="middle", shorten=True, shorten_from="right")
+            label.bind(size=lambda w, s: setattr(w, "text_size", s))
+            return label
+
+        def with_note(widget: Any, text: str) -> BoxLayout:
+            row = BoxLayout(spacing=dp(8))
+            row.add_widget(widget)
+            row.add_widget(note(text))
+            return row
+
         grid = GridLayout(cols=2, spacing=dp(8), size_hint_y=None, row_default_height=dp(40),
-                          row_force_default=True)
+                          row_force_default=True, padding=(0, 0, dp(12), 0))
         grid.bind(minimum_height=grid.setter("height"))
         model_in = TextInput(text=self.settings.model, multiline=False, write_tab=False)
         url_in = TextInput(text=self.settings.base_url, multiline=False, write_tab=False)
         website_cb = CheckBox(active=self.settings.resolve_website, size_hint_x=None,
                               width=dp(40))
-        website_row = BoxLayout()
-        website_row.add_widget(website_cb)
-        website_row.add_widget(Label(text="(slower: one web request per new domain)",
-                                     color=(0.7, 0.7, 0.7, 1)))
+        website_row = with_note(website_cb, "(slower: one web request per new domain)")
         dict_cb = CheckBox(active=self.settings.use_dictionary, size_hint_x=None,
                            width=dp(40))
-        dict_row = BoxLayout()
-        dict_row.add_widget(dict_cb)
-        dict_row.add_widget(Label(text="(confident matches skip the AI)",
-                                  color=(0.7, 0.7, 0.7, 1)))
+        dict_row = with_note(dict_cb, "(confident matches skip the AI)")
         domains_cb = CheckBox(active=self.settings.check_domains, size_hint_x=None, width=dp(40))
-        domains_row = BoxLayout()
-        domains_row.add_widget(domains_cb)
-        domains_row.add_widget(Label(text="(Google Workspace / Microsoft 365 / no mail server...)",
-                                     color=(0.7, 0.7, 0.7, 1)))
+        domains_row = with_note(domains_cb,
+                                "(Google Workspace / Microsoft 365 / no mail server...)")
         dns_names = {"cloudflare": "Cloudflare (1.1.1.1)", "google": "Google (8.8.8.8)"}
         dns_in = Spinner(text=dns_names[self.settings.dns_service],
-                         values=list(dns_names.values()), size_hint_x=None, width=dp(220))
-        dns_row = BoxLayout(spacing=dp(8))
-        dns_row.add_widget(dns_in)
-        dns_row.add_widget(Label(text="(only domain names are sent)", color=(0.7, 0.7, 0.7, 1)))
-        parallel_row = BoxLayout(spacing=dp(8))
+                         values=list(dns_names.values()), size_hint_x=None, width=dp(200))
+        dns_row = with_note(dns_in, "(only domain names are sent)")
         parallel_in = Spinner(text=str(self.settings.ai_parallel),
                               values=["1", "2", "3", "4"], size_hint_x=None, width=dp(70))
-        parallel_row.add_widget(parallel_in)
-        parallel_row.add_widget(Label(text="(2-4 is faster with a graphics card; keep 1 on CPU)",
-                                      color=(0.7, 0.7, 0.7, 1)))
+        parallel_row = with_note(parallel_in,
+                                 "(2-4 is faster with a graphics card; keep 1 on CPU)")
+        scale_in = Spinner(text=self.settings.ui_scale, values=list(UI_SCALE_CHOICES),
+                           size_hint_x=None, width=dp(100))
+        scale_row = with_note(scale_in, "(smaller = more fits on screen; applies after restart)")
         dict_buttons = BoxLayout(spacing=dp(8))
         import_btn = Button(text="Import names...")
         import_btn.bind(on_release=lambda *_: self.choose_import_kind())
@@ -1638,19 +1745,25 @@ class EmailNameResolverApp(App):
                              ("AI emails at once", parallel_row),
                              ("Detect provider & verify", domains_row),
                              ("DNS lookup service", dns_row),
+                             ("Interface size", scale_row),
                              ("Your name lists", dict_buttons)):
-            grid.add_widget(Label(text=text, size_hint_x=None, width=dp(190),
-                                  halign="left", valign="middle", text_size=(dp(190), None)))
+            label = Label(text=text, size_hint_x=None, width=dp(180),
+                          halign="left", valign="middle")
+            label.bind(size=lambda w, s: setattr(w, "text_size", s))
+            grid.add_widget(label)
             grid.add_widget(widget)
 
-        info = Label(text="", size_hint_y=None, height=dp(30), color=(0.8, 0.85, 1, 1))
+        scroll = ScrollView(bar_width=dp(8), scroll_type=["bars", "content"])
+        scroll.add_widget(grid)
+        info = Label(text="", size_hint_y=None, height=dp(30), color=(0.8, 0.85, 1, 1),
+                     halign="left", valign="middle", shorten=True)
+        info.bind(size=lambda w, s: setattr(w, "text_size", s))
         box = BoxLayout(orientation="vertical", padding=dp(12), spacing=dp(10))
-        box.add_widget(grid)
+        box.add_widget(scroll)
         box.add_widget(info)
-        box.add_widget(Label())  # spacer
         buttons = BoxLayout(size_hint_y=None, height=dp(42), spacing=dp(8))
-        popup = Popup(title="Settings", content=box, size_hint=(None, None),
-                      size=(dp(820), dp(600)))
+        popup = self.fit_popup(Popup(title="Settings", content=box, size_hint=(None, None)),
+                               dp(820), dp(560))
 
         def test_connection(*_: Any) -> None:
             info.text = "Checking..."
@@ -1660,6 +1773,11 @@ class EmailNameResolverApp(App):
         def show_guide(*_: Any) -> None:
             popup.dismiss()
             self.open_setup_guide()
+
+        old_scale = self.settings.ui_scale
+
+        def scale_changed() -> bool:
+            return scale_in.text != old_scale
 
         def save(*_: Any) -> None:
             url = url_in.text.strip().rstrip("/")
@@ -1675,11 +1793,14 @@ class EmailNameResolverApp(App):
                                      dns_service=next(k for k, v in dns_names.items()
                                                       if v == dns_in.text),
                                      export_format=self.settings.export_format,
-                                     export_only_resolved=self.settings.export_only_resolved)
+                                     export_only_resolved=self.settings.export_only_resolved,
+                                     ui_scale=scale_in.text)
             snapshot = Settings(**vars(self.settings))
             popup.dismiss()
+            saved = ("Settings saved. Restart the app to apply the new interface size."
+                     if scale_changed() else "Settings saved.")
             _run_in_background(lambda: save_settings(snapshot),
-                               lambda _p: self.set_status("Settings saved."),
+                               lambda _p: self.set_status(saved),
                                lambda exc: self.set_status(f"Could not save settings: {exc}"))
 
         for text, handler in (("Setup guide", show_guide),

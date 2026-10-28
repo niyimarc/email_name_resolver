@@ -213,6 +213,27 @@ Above the table the app shows **Resolved / Not resolved / Total**. A row counts
 as resolved when its Final Name has text, so a name you type in yourself
 counts too. The counter updates live as results arrive and as you edit.
 
+### Screen size and Interface size
+
+The window opens at 90% of your screen (taskbar excluded) and is never larger
+than the screen, so it fits laptops, large monitors and Remote Desktop alike.
+The layout adapts as you resize it:
+
+| Window width | Layout |
+| --- | --- |
+| Wide | all 9 columns, buttons beside the input box |
+| Medium | hides Name Parts and Company Website |
+| Narrow | also hides Confidence and Mail Provider; buttons move under the input box |
+
+Hidden values are still there: click a row's **Reason** to see everything,
+and exports always include every column. Dialogs shrink to fit the window and
+scroll when needed.
+
+Buttons and text follow Windows display scaling (Settings > Display > Scale).
+If everything still looks too big or too small, change
+**Settings > Interface size** (Auto, 80%, 90%, 100%, 110%, 125%) and restart
+the app. On a small screen at 125-150% scaling, 80% or 90% fits much more.
+
 ### Export CSV
 
 **Export CSV** opens a small dialog:
@@ -299,11 +320,12 @@ Shared fixtures (fake Ollama, sample rows, the safety rules) are in
 
 ### Automatic tests on GitHub
 
-`.github/workflows/tests.yml` runs the whole suite on every push and pull
-request, on Windows and Linux with Python 3.12 and 3.13, and fails if
-coverage drops below 90%. Results appear in the **Actions** tab and as a
-green tick / red cross next to each commit. The release build
-(`build-exe.yml`) also runs the tests before building the .exe.
+`.github/workflows/tests.yml` runs the suite on every push and pull request
+on a Windows machine with Python 3.13, using the light `requirements-test.txt`
+(no Kivy/PyInstaller, so the UI-helper tests are skipped there). A run takes
+about 1 to 2 minutes, is stopped after 10, and fails if coverage drops below
+90%. Results appear in the **Actions** tab and as a green tick / red cross
+next to each commit.
 
 ## 5. Build a Windows .exe
 
@@ -330,27 +352,37 @@ creates **one** file, `dist\EmailNameResolver.exe`, with everything inside.
 It unpacks itself to a temporary folder each time it starts, so it opens a
 few seconds slower than the folder version (`build.spec`).
 
+### Version, developer info and releases
+
+The version number and developer details live in **`version.py`** (one
+place; the window title, Help guide and the .exe's Windows properties all
+read it). To release a new version, change `__version__` there, build the
+.exe and publish it as described below. **CHANGELOG.md** records what
+changed in each version.
+
 ### Download the .exe from GitHub (no copying)
 
-`.github/workflows/build-exe.yml` builds the single-file .exe on GitHub's
-Windows machines (the tests run first; a failing test stops the build):
-
-- **Every push to `master`** replaces the release **"Latest build (master)"**
-  with a fresh .exe, about 5 to 10 minutes after the push.
-- **A version tag** creates a permanent numbered release:
-
-  ```
-  git tag v1.0.0
-  git push origin v1.0.0
-  ```
-
-On any computer (e.g. the RDP) this link always downloads the newest .exe:
+Build the .exe once, publish it as a GitHub Release, and download it on any
+computer (e.g. the RDP) with this link, which always gives the newest release:
 
 https://github.com/niyimarc/email_name_resolver/releases/latest/download/EmailNameResolver.exe
 
-(For a private repository, sign in to GitHub in that browser first.) You can
-also run the build by hand: **Actions > Build Windows .exe > Run workflow**;
-the .exe is then attached to that run under **Artifacts**.
+(For a private repository, sign in to GitHub in that browser first.)
+
+**Option A: build on your PC and upload (fastest, about 3 minutes).**
+
+1. `pyinstaller build_onefile.spec --clean -y`
+2. On GitHub: **Releases > Draft a new release**, type a tag such as `v1.0.1`,
+   drag `dist\EmailNameResolver.exe` into the attachments box, click
+   **Publish release**.
+
+**Option B: let GitHub build it (about 8 to 12 minutes, nothing to upload).**
+`.github/workflows/build-exe.yml` runs only when you ask, never on a normal push:
+
+- push a version tag: `git tag v1.0.1` then `git push origin v1.0.1`, or
+- **Actions > Build Windows .exe > Run workflow**, enter a version, click Run.
+
+The build is stopped automatically if it takes more than 30 minutes.
 
 The first time Windows runs a downloaded, unsigned .exe, SmartScreen may show
 "Windows protected your PC": click **More info > Run anyway**.
@@ -368,7 +400,9 @@ before starting the app; your value always takes priority.
 ```
 email_name_resolver/
 ├── main.py                  # Kivy UI, threading, file dialogs
+├── version.py               # app version + developer info (edit here)
 ├── help_guide.py            # in-app Ollama install / model setup guide
+├── ui_layout.py             # window fits the screen, responsive layout modes
 ├── pipeline/
 │   ├── splitter.py          # split_email_local, hints, PARTICLES
 │   ├── ai_judge.py          # NameVerdict, judge_name_with_ai
@@ -385,17 +419,20 @@ email_name_resolver/
 ├── assets/                  # logo (SVG/PNG) and Windows icon (icon.ico)
 ├── data/                    # bundled US name lists
 ├── tools/
-│   └── build_name_data.py   # regenerates data/ from public sources
+│   ├── build_name_data.py   # regenerates data/ from public sources
+│   └── windows_version_info.py  # .exe Properties > Details, from version.py
 ├── tests/                   # pytest suite (see "4. Tests")
 │   ├── conftest.py          # shared fixtures, fakes, safety rules
-│   └── test_*.py            # 11 test files
+│   └── test_*.py            # 13 test files
 ├── requirements.txt
 ├── requirements-dev.txt     # + pytest, pytest-cov
+├── requirements-test.txt    # light install for the GitHub test run
 ├── pytest.ini
 ├── build.spec               # one-folder build
 ├── build_onefile.spec       # single standalone .exe
 ├── .github/workflows/tests.yml      # runs the tests on every push
 ├── .github/workflows/build-exe.yml  # builds + publishes the .exe on GitHub
+├── CHANGELOG.md             # what changed in each version
 └── README.md
 ```
 

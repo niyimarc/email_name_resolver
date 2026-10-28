@@ -33,7 +33,14 @@ try:
 except ImportError:
     _angle_bins = []
 
-APP_NAME = "EmailNameResolver"
+import sys
+
+sys.path.insert(0, SPECPATH)  # so version.py and tools/ can be imported
+
+import version  # noqa: E402
+from tools.windows_version_info import build_version_info  # noqa: E402
+
+APP_NAME = version.APP_ID  # "EmailNameResolver"
 
 # Kivy picks its window/text/image/clipboard backends at runtime by name, so
 # PyInstaller cannot find them on its own. get_deps_minimal() lists them as
@@ -85,5 +92,7 @@ exe = EXE(
     runtime_tmpdir=None,
     console=False,  # --windowed
     icon="assets/icon.ico",
+    # Windows Properties > Details: version, product name, copyright (version.py)
+    version=build_version_info(),
     disable_windowed_traceback=False,
 )

@@ -34,3 +34,8 @@ def test_assets_exist(name):
 
 def test_kivy_does_not_eat_command_line_args():
     assert os.environ.get("KIVY_NO_ARGS") == "1"
+
+
+def test_window_title_shows_version():
+    import version
+    assert main.APP_TITLE == f"Email Name Resolver v{version.__version__}"

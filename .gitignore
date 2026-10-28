@@ -21,6 +21,9 @@ email_list_*.zip
 email_names_*.csv
 *.tmp
 
+# --- Private maintainer notes (kept locally, not published) ----------------
+RELEASING.md
+
 # --- Kivy / logs -------------------------------------------------------------------
 .kivy/
 *.log

@@ -5,6 +5,9 @@
 #   * Or: GitHub > Actions > "Build Windows .exe" > Run workflow
 #     (enter a version such as v1.0.1)
 #
+# The tag must equal "v" + __version__ from version.py, otherwise the run
+# stops before building.
+#
 # Newest .exe (works in any browser, e.g. on the RDP):
 #   https://github.com/niyimarc/email_name_resolver/releases/latest/download/EmailNameResolver.exe
 name: Build Windows .exe
@@ -37,6 +40,15 @@ jobs:
         with:
           python-version: "3.13"   # Kivy 2.3.1 has no wheels for 3.14+
           cache: pip
+
+      - name: Check the tag matches version.py
+        run: |
+          APP_VERSION="v$(python version.py)"
+          echo "version.py says $APP_VERSION, release is $VERSION"
+          if [ "$APP_VERSION" != "$VERSION" ]; then
+            echo "::error::Release $VERSION does not match version.py ($APP_VERSION). Update __version__ in version.py, commit, and tag again."
+            exit 1
+          fi
 
       - name: Install dependencies
         run: |

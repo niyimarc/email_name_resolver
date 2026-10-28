@@ -17,6 +17,8 @@ from typing import Any, List, Tuple
 
 from kivy.core.clipboard import Clipboard
 from kivy.metrics import dp
+
+import version
 from kivy.uix.boxlayout import BoxLayout
 from kivy.uix.button import Button
 from kivy.uix.image import Image
@@ -217,7 +219,8 @@ def open_setup_guide(app: Any, logo: str = "") -> None:
         header = BoxLayout(size_hint_y=None, height=dp(96), spacing=dp(14))
         header.add_widget(Image(source=logo, size_hint_x=None, width=dp(96),
                                 fit_mode="contain"))
-        title = Label(text="[size=22sp][b]Email Name Resolver[/b][/size]\n"
+        title = Label(text=f"[size=22sp][b]{version.APP_NAME}[/b][/size]  "
+                           f"[color=a0a0a0]{version.about_text()}[/color]\n"
                            "[color=8be28b]AI setup guide[/color]",
                       markup=True, halign="left", valign="middle")
         title.bind(size=lambda w, s: setattr(w, "text_size", s))
