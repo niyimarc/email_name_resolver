@@ -19,7 +19,7 @@ from __future__ import annotations
 
 from typing import Tuple
 
-__version__ = "1.0.0"
+__version__ = "1.1.0"
 
 APP_NAME = "Email Name Resolver"
 APP_ID = "EmailNameResolver"            # .exe name, %APPDATA% folder name
